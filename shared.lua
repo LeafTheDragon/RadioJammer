@@ -1,140 +1,175 @@
+-- Radio Jammer blocks all voice and text chat, except for
+-- detectives who have radio frequency 42Hz.
+-- Lasts for 30secs or until destroyed.
 local config = ttt_perky_config
 
-ENT.Type 	 = "anim"
-ENT.Model 	 = Model( "models/props/cs_office/radio.mdl" )
-ENT.LifeTime = config.radiojammer_duration
-ENT.destructTime = 0
-ENT.SoundInterval = config.radiojammer_sound_interval
-ENT.NextSound = 0
-ENT.DetectiveNearRadius = 400
-ENT.Health = config.radiojammer_health
+SWEP.Base					= "weapon_tttbase"
+SWEP.HoldType				= "normal"
 
-local jamSound = Sound( "npc/scanner/cbot_servochatter.wav" )
--- load sounds
-local randomSounds = {}
-for i = 1, 15 do
-	randomSounds[i] = Sound( "ambient/levels/prison/radio_random"..i..".wav" )
-end
+SWEP.Primary.ClipSize       = -1
+SWEP.Primary.DefaultClip    = -1
+SWEP.Primary.Automatic      = false
+SWEP.Primary.Ammo       	= "none"
+SWEP.Primary.Delay 			= 1.0
 
-if SERVER then 
-	AddCSLuaFile("shared.lua") 
+SWEP.Secondary.ClipSize     = -1
+SWEP.Secondary.DefaultClip  = -1
+SWEP.Secondary.Automatic    = false
+SWEP.Secondary.Ammo     	= "none"
+SWEP.Secondary.Delay 		= 1.0
+
+SWEP.IronSightsPos = Vector( 6.05, -5, 2.4 )
+SWEP.IronSightsAng = Vector( 2.2, -0.1, 0 )
+SWEP.ViewModel  = "models/weapons/v_crowbar.mdl"
+SWEP.WorldModel = "models/props_lab/reciever01b.mdl"
+
+--- TTT config values
+SWEP.Kind = WEAPON_EQUIP2
+SWEP.AutoSpawnable = false
+SWEP.AmmoEnt = "item_ammo_radiojammer_ttt"
+SWEP.CanBuy = { ROLE_TRAITOR }
+SWEP.InLoadoutFor = nil
+SWEP.LimitedStock = config.radiojammer_limited_stock
+SWEP.AllowDrop = true
+SWEP.IsSilent = false
+SWEP.NoSights = true
+
+local throwsound = Sound( "Weapon_SLAM.SatchelThrow" )
+
+if SERVER then
+	AddCSLuaFile( "shared.lua" )
+	resource.AddFile("materials/VGUI/ttt/icon_radiojammer.vmt")
 end
 
 if CLIENT then
-   -- this entity can be DNA-sampled so we need some display info
-   ENT.Icon = "VGUI/ttt/icon_radiojammer"
-   ENT.PrintName = "Radio Jammer"
+	SWEP.PrintName = "Radio Jammer"
+	SWEP.Slot      = 7 -- add 1 to get the slot number key
+
+	SWEP.ViewModelFOV  = 10
+	SWEP.ViewModelFlip = false
+
+	-- Path to the icon material
+	SWEP.Icon = "VGUI/ttt/icon_radiojammer"
+
+	-- Text shown in the equip menu
+	SWEP.EquipMenuData = {
+	   type = "Weapon",
+	   desc = "Place a radio jammer that blocks all \nvoice and text chat for "..config.radiojammer_duration.." seconds. \nThe radio jammer emits a loud noise and \ndetectives can talk on a different frequency!"
+	}
 end
 
-function ENT:Initialize()
-	self.Entity:SetModel( self.Model )
-	self.Entity:PhysicsInit(SOLID_VPHYSICS)
-	self.Entity:SetMoveType(MOVETYPE_VPHYSICS)
-	self.Entity:SetSolid(SOLID_VPHYSICS)
-	self.Entity:SetCollisionGroup(COLLISION_GROUP_NONE)
-	self.Entity:SetHealth( self.health ) < 300
-	if SERVER then
-	    self.Entity:SetMaxHealth( self.health ) < 300
-		self.Entity:SetUseType(SIMPLE_USE)
-		self.destructTime = CurTime() + self.LifeTime
-	elseif CLIENT then
-	   if LocalPlayer() == self:GetOwner() then
-	      LocalPlayer().radiojammer = self.Entity
-	   end
-	end
-	self.NextSound = CurTime() + self.SoundInterval
-	self.jamming = false
-	self.fingerprints = {}
+function SWEP:OnDrop()
+   self:Remove()
 end
 
-function ENT:IsDetectiveNear()
-   local center = self:GetPos()
-   local r = self.DetectiveNearRadius ^ 2
-   local d = 0.0
-   local diff = nil
-   for _, ent in pairs(player.GetAll()) do
-      if IsValid(ent) and ent:IsActiveDetective() then
-         -- dot of the difference with itself is distance squared
-         diff = center - ent:GetPos()
-         d = diff:DotProduct(diff)
+function SWEP:Deploy()
+   self.Owner:DrawViewModel(false)
+   return true
+end
 
-         if d < r then
-               return true
-         end
-      end
-   end
-
+function SWEP:DrawWorldModel()
    return false
 end
 
-function ENT:Think()
-	if SERVER then
-		if CurTime() > self.destructTime then
-			self:DoExplode()
-			self:Remove()
-		end
-		if CurTime() > self.NextSound then
-			self.NextSound = CurTime() + self.SoundInterval
-			local amp = 100
-			if self:IsDetectiveNear() then
-		         amp = 140
-			end
-			local n = math.random(1,15)
-			WorldSound( randomSounds[n], self:GetPos(), amp, 100 )
-			--WorldSound( jamSound, self:GetPos(), amp, 100 )
-		end
+function SWEP:Initialize()
+	if CLIENT then
+		self:AddHUDHelp(
+			"MOUSE1 Places the radio jammer",
+			"",
+			false
+		)
 	end
 end
 
-local zapsound = Sound("npc/assassin/ball_zap1.wav")
-function ENT:OnTakeDamage(dmginfo)
-   self:TakePhysicsDamage(dmginfo)
-   self:SetHealth(self:Health() - dmginfo:GetDamage())
-   if self:Health() < 0 then
-		self:DoExplode()
+function SWEP:PrimaryAttack()
+	if SERVER then
+		self:RadioJammerDrop()
 		self:Remove()
-   end
+	end
+	self:TakePrimaryAmmo( 1 )
 end
 
-function ENT:DoExplode()
-	local effect = EffectData()
-	effect:SetOrigin( self:GetPos() )
-	util.Effect("cball_explode", effect)
-	WorldSound( zapsound, self:GetPos() )
+function SWEP:SecondaryAttack()
+	if SERVER then
+		self:RadioJammerStick()
+	end
+	self:TakePrimaryAmmo( 1 )
 end
 
-function ENT:OnRemove()
-   if CLIENT then
-      if LocalPlayer() == self:GetOwner() then
-         LocalPlayer().radiojammer = nil
+function SWEP:RadioJammerDrop()
+	   
+   if SERVER then
+      local ply = self.Owner
+      if not IsValid(ply) then return end
+
+      if self.Planted then return end
+
+      local vsrc = ply:GetShootPos()
+      local vang = ply:GetAimVector()
+      local vvel = ply:GetVelocity()
+      
+      local vthrow = vvel + vang * 200
+
+      local radio = ents.Create("ttt_radiojammer")
+      if IsValid(radio) then
+         radio:SetPos(vsrc + vang * 10)
+         radio:SetOwner(ply)
+         radio:Spawn()
+
+         radio:PhysWake()
+         local phys = radio:GetPhysicsObject()
+         if IsValid(phys) then
+            phys:SetVelocity(vthrow)
+         end   
+         self:Remove()
+
+         self.Planted = true
       end
    end
+
+   self.Weapon:EmitSound(throwsound)
 end
 
-if SERVER then
-	
-	function ENT.PlayerSay( ply, text, team )
-		if #ents.FindByClass( 'ttt_radiojammer' ) > 0 then
-			if not ply:HasEquipmentItem( EQUIP_RADIOFREQUENCY ) then
-				return "[JAMMED]"
-			end
-		end
-	end
-	hook.Add( 'PlayerSay', 'ttt_radiojammer_playersay', ENT.PlayerSay )
-	
-	function ENT.PlayerCanHearVoice( listner, talker, spectator )
-		if #ents.FindByClass( 'ttt_radiojammer' ) > 0 then
-			if talker:IsSpec() then
-			    return nil
-			elseif talker:IsActiveTraitor() then
-				return nil
-			elseif talker:HasEquipmentItem( EQUIP_RADIOFREQUENCY ) then
-				return nil
-			else
-				return false, false
-			end
-		end
-	end
-	hook.Add( 'PlayerCanHearPlayersVoice', 'ttt_radiojammer_PlayerCanHearPlayersVoice', ENT.PlayerCanHearVoice )
+function SWEP:RadioJammerStick()
+   if SERVER then
+      local ply = self.Owner
+      if not ValidEntity(ply) then return end
 
+      if self.Planted then return end
+
+      local ignore = {ply, self.Weapon}
+      local spos = ply:GetShootPos()
+      local epos = spos + ply:GetAimVector() * 80
+      local tr = util.TraceLine({start=spos, endpos=epos, filter=ignore, mask=MASK_SOLID})
+
+      if tr.HitWorld then
+         local radio = ents.Create("ttt_radiojammer")
+         if ValidEntity(radio) then
+            radio:PointAtEntity(ply)
+
+            local tr_ent = util.TraceEntity({start=spos, endpos=epos, filter=ignore, mask=MASK_SOLID}, radio)
+
+            if tr_ent.HitWorld then
+
+               local ang = tr_ent.HitNormal:Angle()
+               ang:RotateAroundAxis(ang:Up(), -180)
+
+               radio:SetPos(tr_ent.HitPos + ang:Forward() * -2.5)
+               radio:SetAngles(ang)
+               radio:SetOwner(ply)
+               radio:Spawn()
+			   ply.radiojammer = radio
+
+               local phys = radio:GetPhysicsObject()
+               if ValidEntity(phys) then
+                  phys:EnableMotion(false)
+               end
+
+               radio.IsOnWall = true
+               self.Planted = true
+				self:Remove()
+            end
+         end
+      end
+   end
 end
