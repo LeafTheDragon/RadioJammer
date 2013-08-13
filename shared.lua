@@ -32,9 +32,9 @@ function ENT:Initialize()
 	self.Entity:SetMoveType(MOVETYPE_VPHYSICS)
 	self.Entity:SetSolid(SOLID_VPHYSICS)
 	self.Entity:SetCollisionGroup(COLLISION_GROUP_NONE)
-	self.Entity:SetHealth( self.health )
+	self.Entity:SetHealth( self.health ) < 300
 	if SERVER then
-	    self.Entity:SetMaxHealth( self.health )
+	    self.Entity:SetMaxHealth( self.health ) < 300
 		self.Entity:SetUseType(SIMPLE_USE)
 		self.destructTime = CurTime() + self.LifeTime
 	elseif CLIENT then
