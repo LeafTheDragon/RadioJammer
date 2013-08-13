@@ -122,7 +122,7 @@ if SERVER then
 	end
 	hook.Add( 'PlayerSay', 'ttt_radiojammer_playersay', ENT.PlayerSay )
 	
-	function ENT.PlayerCanHearVoice( listner, talker )
+	function ENT.PlayerCanHearVoice( listner, talker, spectator )
 		if #ents.FindByClass( 'ttt_radiojammer' ) > 0 then
 			if talker:IsSpec() then
 			    return nil
