@@ -7,7 +7,7 @@ ENT.destructTime = 0
 ENT.SoundInterval = config.radiojammer_sound_interval
 ENT.NextSound = 0
 ENT.DetectiveNearRadius = 400
-ENT.Health = config.radiojammer_health
+ENT.Health = 300
 
 local jamSound = Sound( "npc/scanner/cbot_servochatter.wav" )
 -- load sounds
